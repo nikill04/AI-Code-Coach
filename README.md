@@ -1,76 +1,78 @@
 # AI Code Coach
 
-AI Code Coach is a Retrieval-Augmented Generation (RAG) based tool designed to help developers debug, translate, and understand their codebase. This release introduces **Semantic Intelligence** for a more powerful developer experience.
+AI Code Coach answers questions about the code in the `codebase/` folder. It can
+**debug** it, **translate** it to another language, or **explain** how it works.
 
-## 🚀 Features
+It uses RAG (Retrieval-Augmented Generation): instead of sending your whole
+project to the AI, it first searches for the few pieces of code related to your
+question and sends only those, together with the question.
 
-- **Interactive Web UI**: Modern chat-based interface built with Streamlit.
-- **Semantic Intelligence 🧠**: Uses syntax-aware splitting (Python AST) to ensure code chunks are logically complete.
-- **Debug & Explain**: Get clear, context-aware explanations and root-cause analysis.
-- **Local Indexing**: Rapidly searches your codebase using FAISS and HuggingFace embeddings.
-- **Advanced Context**: Automatically includes file metadata and structured headers for better LLM performance.
+## How it works
 
-## 🛠️ Prerequisites
+```
+                 (once)  ingest.py
+codebase/*.py ──────────────────────────► vector_index/   (searchable "map" of your code)
 
-- Python 3.10+
-- A Groq API Key (get one at [console.groq.com](https://console.groq.com/))
+            (every question)  logic.py
+question ──► 1. search vector_index for the 5 most related code chunks   (retriever.py)
+         ──► 2. put chunks + question into a prompt                      (prompts.py)
+         ──► 3. send the prompt to the Groq LLM, get the answer          (llm.py)
+```
 
-## 📦 Installation
+| File | What it does |
+|------|--------------|
+| `config.py` | All settings: folders, API key, model names. |
+| `ingest.py` | Reads `codebase/`, splits the code into chunks, turns each chunk into a vector, and saves the index to `vector_index/`. |
+| `embeddings.py` | Loads the embedding model (turns text into vectors so you can search by meaning). |
+| `retriever.py` | Loads the saved index (or builds it the first time) and finds the chunks related to a question. |
+| `prompts.py` | The three prompt templates: Debug, Translate, Explain. |
+| `llm.py` | Connects to the Groq language model. |
+| `logic.py` | The core: search, then fill the prompt, then ask the LLM. Used by both apps below. |
+| `streamlit_app.py` | The web app (chat interface). |
+| `app.py` | The same thing as a command-line program. |
+| `codebase/` | Put the code you want to ask about here. `buggy_script.py` has a bug on purpose so you can try "Debug Code". |
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/Druva4444/AI-Code-Coach.git
-   cd AI-Code-Coach
+## Setup
+
+You need Python 3.10 to 3.12 and a free Groq API key.
+
+1. **Get a Groq key** at <https://console.groq.com/keys>. Sign in, click **Create API Key**, and copy it.
+2. **Create a `.env` file** next to this README (copy `.env.example`) containing:
    ```
-
-2. **Install dependencies**:
+   GROQ_API_KEY=gsk_...your key...
+   ```
+3. **Install the dependencies** (in a virtual environment):
    ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate        # Windows: .venv\Scripts\activate
    pip install -r requirements.txt
    ```
 
-3. **Set up environment variables**:
-   Create a `.env` file in the root directory:
-   ```env
-   GROQ_API_KEY="your_groq_api_key_here"
-   ```
+## Run it
 
-## 📖 Usage
-
-### 1. Index your Codebase
-Place the code you want to analyze in the `codebase/` directory. Then, run the ingestion script to build the semantic vector index:
 ```bash
-python3 ingest.py
+streamlit run streamlit_app.py     # web app, opens in your browser
+python app.py                      # or the command-line version
 ```
 
-### 2. Run the Web Interface (Recommended)
-Start the interactive Streamlit application:
-```bash
-streamlit run streamlit_app.py
-```
-This will open a browser window where you can choose a task and chat with the AI about your code.
+The first run downloads the embedding model (about 90 MB) and builds the index,
+so it takes a minute. After that it is fast.
 
-### 3. Run the CLI Version (Optional)
-Alternatively, you can use the command-line tool:
+**Changed the files in `codebase/`?** Rebuild the index:
 ```bash
-python3 app.py
+python ingest.py
 ```
 
-## 📁 Project Structure
+## Good to know
 
-- `streamlit_app.py`: Main entry point for the Web application.
-- `app.py`: CLI entry point for the application.
-- `logic.py`: Shared core logic for query processing and RAG execution.
-- `ingest.py`: Script to build the semantic FAISS index using Python-specific splitting.
-- `retriever.py`: Handles loading the vector index and retrieving relevant code snippets.
-- `llm.py`: Configuration for the Groq LLM.
-- `prompts.py`: Task prompt templates for debugging, translation, and explanations.
-- `codebase/`: Put the source files you want the AI to "read" here.
-- `vector_index/`: Stores the generated FAISS index files.
+- Each question is answered on its own. The assistant does not remember earlier messages in the chat.
+- To use a different Groq model, set `GROQ_MODEL` in `.env` (the default is `openai/gpt-oss-120b`). If Groq retires a model, pick a new one from <https://console.groq.com/docs/models>.
+- You may see a `langchain-community is being sunset` warning. It's only a notice and doesn't affect anything.
 
-## 🧰 Technologies Used
+## Built with
 
-- [LangChain](https://github.com/langchain-ai/langchain): Framework for building LLM applications.
-- [Streamlit](https://streamlit.io/): Framework for building interactive web apps.
-- [FAISS](https://github.com/facebookresearch/faiss): Efficient similarity search and clustering of dense vectors.
-- [Groq](https://groq.com/): High-performance LLM inference.
-- [HuggingFace Embeddings](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2): For generating code vector representations.
+- [LangChain](https://python.langchain.com/): glue between the search index, prompts and LLM
+- [Streamlit](https://streamlit.io/): the web interface
+- [FAISS](https://github.com/facebookresearch/faiss): fast vector search
+- [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2): embedding model
+- [Groq](https://groq.com/): fast, free-tier LLM API

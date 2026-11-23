@@ -1,85 +1,32 @@
-from retriever import get_retriever
+"""The core RAG (Retrieval-Augmented Generation) step, shared by the web app and CLI.
+
+RAG in three steps:
+  1. Retrieve: find the code chunks most related to the question.
+  2. Augment:  paste those chunks into a prompt together with the question.
+  3. Generate: send the prompt to the LLM and return its answer.
+"""
+from langchain_core.output_parsers import StrOutputParser
+
 from llm import get_llm
-from prompts import DEBUG_PROMPT, TRANSLATE_PROMPT, EXPLAIN_PROMPT
-from langchain.chains import LLMChain
+from prompts import PROMPTS
+from retriever import get_retriever
 
-def process_query(choice, query):
+
+def process_query(task, query):
+    """Answer `query` for the given task ("Debug Code", "Translate Code" or "Explain Algorithm").
+
+    Returns (answer_text, list_of_code_chunks_used).
     """
-    Processes a code-related query using RAG.
-    choice: "1" (Debug), "2" (Translate), "3" (Explain)
-    query: The user's question or problem description.
-    """
-    retriever = get_retriever()
-    llm = get_llm()
+    # 1. Retrieve
+    docs = get_retriever().invoke(query)
 
-    # Retrieve relevant documents
-    docs = retriever.get_relevant_documents(query)
-    
-    # Format context with metadata (filename)
-    context_parts = []
-    for doc in docs:
-        source = doc.metadata.get('source', 'Unknown')
-        context_parts.append(f"--- File: {source} ---\n{doc.page_content}")
-    
-    context = "\n\n".join(context_parts)
+    # 2. Augment: label each chunk with the file it came from.
+    context = "\n\n".join(
+        f"--- File: {doc.metadata['source']} ---\n{doc.page_content}" for doc in docs
+    )
 
-    # Select prompt based on choice
-    if choice == "1":
-        prompt = DEBUG_PROMPT
-    elif choice == "2":
-        prompt = TRANSLATE_PROMPT
-    else:
-        prompt = EXPLAIN_PROMPT
+    # 3. Generate: prompt -> LLM -> plain text.
+    chain = PROMPTS[task] | get_llm() | StrOutputParser()
+    answer = chain.invoke({"context": context, "query": query})
 
-    # Run the chain
-    chain = LLMChain(llm=llm, prompt=prompt)
-    result = chain.run(context=context, query=query)
-    
-    # Check for suggested fixes
-    fix_info = parse_fix(result)
-    
-    return result, docs, fix_info
-
-def parse_fix(text):
-    """
-    Parses the LLM output for a suggested file fix.
-    Looks for:
-    FILE: <path>
-    ```python
-    content
-    ```
-    """
-    import re
-    import os
-    from config import BASE_DIR
-    
-    # Flexible pattern for FILE: followed by a code block
-    pattern = r"(?i)FILE:\s*(.*?)\s*\n+```python\n(.*?)\n```"
-    match = re.search(pattern, text, re.DOTALL)
-    
-    if match:
-        path = match.group(1).strip()
-        new_content = match.group(2)
-        
-        # Resolve path if relative
-        if not os.path.isabs(path):
-            abs_path = os.path.join(BASE_DIR, path)
-            if os.path.exists(abs_path):
-                path = abs_path
-            else:
-                # Try relative to codebase
-                cb_path = os.path.join(BASE_DIR, "codebase", path)
-                if os.path.exists(cb_path):
-                    path = cb_path
-                    
-        return {"file_path": path, "new_content": new_content}
-    return None
-
-def apply_fix(file_path, new_content):
-    """Writes the new content to the specified file."""
-    try:
-        with open(file_path, 'w') as f:
-            f.write(new_content)
-        return True, f"Successfully updated {file_path}"
-    except Exception as e:
-        return False, str(e)
+    return answer, docs
