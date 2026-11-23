@@ -69,10 +69,24 @@ python ingest.py
 - To use a different Groq model, set `GROQ_MODEL` in `.env` (the default is `openai/gpt-oss-120b`). If Groq retires a model, pick a new one from <https://console.groq.com/docs/models>.
 - You may see a `langchain-community is being sunset` warning. It's only a notice and doesn't affect anything.
 
+## Deployment (Render)
+
+The app runs on Render's free plan as a **Web Service** connected to this GitHub repo.
+Every push to `master` redeploys it automatically. Settings used:
+
+| Setting | Value |
+|---------|-------|
+| Build command | `pip install -r requirements.txt` |
+| Start command | `streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true` |
+| Health check path | `/_stcore/health` |
+| Environment variables | `GROQ_API_KEY` (your key), `PYTHON_VERSION=3.12.8` |
+
+The free plan sleeps after 15 minutes without visitors; the next visit takes about a minute to wake it up.
+
 ## Built with
 
 - [LangChain](https://python.langchain.com/): glue between the search index, prompts and LLM
 - [Streamlit](https://streamlit.io/): the web interface
 - [FAISS](https://github.com/facebookresearch/faiss): fast vector search
-- [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2): embedding model
+- [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2): embedding model, run with [FastEmbed](https://github.com/qdrant/fastembed) (light, no PyTorch needed)
 - [Groq](https://groq.com/): fast, free-tier LLM API
