@@ -27,8 +27,9 @@ question ──► 1. search vector_index for the 5 most related code chunks   (
 | `retriever.py` | Loads the saved index (or builds it the first time) and finds the chunks related to a question. |
 | `prompts.py` | The three prompt templates: Debug, Translate, Explain. |
 | `llm.py` | Connects to the Groq language model. |
-| `logic.py` | The core: search, then fill the prompt, then ask the LLM. Used by both apps below. |
-| `streamlit_app.py` | The web app (chat interface). |
+| `logic.py` | The core: search, then fill the prompt, then ask the LLM. Used by the API and the CLI below. |
+| `api.py` | The backend: a small web API (FastAPI) with one endpoint, `POST /ask`, that runs `logic.py`. |
+| `frontend/index.html` | The website (chat interface). A single HTML page that sends questions to `api.py`. |
 | `app.py` | The same thing as a command-line program. |
 | `codebase/` | Put the code you want to ask about here. `buggy_script.py` has a bug on purpose so you can try "Debug Code". |
 
@@ -51,9 +52,14 @@ You need Python 3.10 to 3.12 and a free Groq API key.
 ## Run it
 
 ```bash
-streamlit run streamlit_app.py     # web app, opens in your browser
-python app.py                      # or the command-line version
+python app.py                      # command-line version
+
+uvicorn api:app --reload           # or the backend API, on http://127.0.0.1:8000
 ```
+
+To use the website against your local API, change `API_URL` at the top of the
+`<script>` in `frontend/index.html` to `http://127.0.0.1:8000` and open the file in
+your browser. You can also try the API itself at <http://127.0.0.1:8000/docs>.
 
 The first run downloads the embedding model (about 90 MB) and builds the index,
 so it takes a minute. After that it is fast.
@@ -69,24 +75,36 @@ python ingest.py
 - To use a different Groq model, set `GROQ_MODEL` in `.env` (the default is `openai/gpt-oss-120b`). If Groq retires a model, pick a new one from <https://console.groq.com/docs/models>.
 - You may see a `langchain-community is being sunset` warning. It's only a notice and doesn't affect anything.
 
-## Deployment (Render)
+## Deployment
 
-The app runs on Render's free plan as a **Web Service** connected to this GitHub repo.
-Every push to `master` redeploys it automatically. Settings used:
+The app is in two parts:
+
+```
+browser ──► website (Vercel)  ──POST /ask──►  API (Render)  ──►  Groq LLM
+            frontend/index.html               api.py
+```
+
+**Website: Vercel**, <https://ai-code-coach-vercel-url>. Vercel project `ai-code-coach`,
+root directory `frontend/`. It is a plain HTML file, so there is no build step.
+
+**API: Render**, <https://ai-code-coach-kghe.onrender.com>. A free **Web Service**
+connected to this GitHub repo; every push to `master` redeploys it. Settings used:
 
 | Setting | Value |
 |---------|-------|
 | Build command | `pip install -r requirements.txt` |
-| Start command | `streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true` |
-| Health check path | `/_stcore/health` |
+| Start command | `uvicorn api:app --host 0.0.0.0 --port $PORT` |
+| Health check path | `/` |
 | Environment variables | `GROQ_API_KEY` (your key), `PYTHON_VERSION=3.12.8` |
 
-The free plan sleeps after 15 minutes without visitors; the next visit takes about a minute to wake it up.
+The free Render plan sleeps after 15 minutes without visitors, so the first
+question after a quiet spell takes about a minute while it wakes up.
 
 ## Built with
 
 - [LangChain](https://python.langchain.com/): glue between the search index, prompts and LLM
-- [Streamlit](https://streamlit.io/): the web interface
+- [FastAPI](https://fastapi.tiangolo.com/): the backend API
+- [Vercel](https://vercel.com/) (website) and [Render](https://render.com/) (API): hosting
 - [FAISS](https://github.com/facebookresearch/faiss): fast vector search
 - [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2): embedding model, run with [FastEmbed](https://github.com/qdrant/fastembed) (light, no PyTorch needed)
 - [Groq](https://groq.com/): fast, free-tier LLM API
