@@ -84,7 +84,7 @@ browser ──► website (Vercel)  ──POST /ask──►  API (Render)  ─�
             frontend/index.html               api.py
 ```
 
-**Website: Vercel**, <https://ai-code-coach-vercel-url>. Vercel project `ai-code-coach`,
+**Website: Vercel**, <https://ai-code-coach-app.vercel.app>. Vercel project `ai-code-coach`,
 root directory `frontend/`. It is a plain HTML file, so there is no build step.
 
 **API: Render**, <https://ai-code-coach-kghe.onrender.com>. A free **Web Service**
