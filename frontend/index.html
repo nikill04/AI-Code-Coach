@@ -1,6 +1,7 @@
 <!doctype html>
-<!-- Web page of AI Code Coach (hosted on Vercel). It sends each question to the
-     backend API on Render (api.py) and shows the answer. -->
+<!-- Web page of AI Code Coach (hosted on Vercel). It looks like the original
+     Streamlit app, sends each question to the backend API on Render (api.py)
+     and shows the answer. -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -8,82 +9,183 @@
   <title>AI Code Coach</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
 
+  <!-- Fonts used by Streamlit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;600&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap">
+
   <!-- marked: turns the AI's Markdown into HTML. DOMPurify: makes that HTML safe.
-       KaTeX: draws math formulas. -->
+       KaTeX: draws math formulas. Prism: colors the code. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
 
   <style>
+    /* Colors copied from the Streamlit app (light and dark theme) */
     :root {
-      --bg: #f7f7f8; --panel: #ffffff; --text: #1f2328; --muted: #656d76;
-      --border: #d8dee4; --accent: #2563eb; --user: #e8f0fe; --code: #f1f3f5;
+      --bg: #ffffff; --sidebar: #f8f8f7; --text: #2f2d2b; --muted: rgba(47, 45, 43, 0.6);
+      --border: #dcd8d4; --button-border: #d7d3cf; --button-bg: #ffffff; --line: #e8e5e2;
+      --primary: #c53948; --user-msg: rgba(240, 242, 246, 0.5); --code-bg: #f7f7f6;
+      --input-bg: #f8f8f7; --send-bg: rgba(187, 187, 165, 0.15);
+      --error-bg: rgba(255, 43, 43, 0.09); --error-text: #7d353b;
+      --tok-keyword: #0b6bcb; --tok-string: #078a3e; --tok-number: #158a8a;
+      --tok-comment: #7c7a76; --tok-operator: #d6530a;
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #0f1115; --panel: #181b21; --text: #e6e8eb; --muted: #9aa3ad;
-        --border: #2c313a; --accent: #60a5fa; --user: #1e2a3d; --code: #0b0d10;
+        --bg: #171614; --sidebar: #21201d; --text: #edebe8; --muted: rgba(237, 235, 232, 0.6);
+        --border: #4a4742; --button-border: #4a4742; --button-bg: #292724; --line: #3a3834;
+        --primary: #cf4250; --user-msg: rgba(38, 39, 48, 0.5); --code-bg: #242321;
+        --input-bg: #2d2b27; --send-bg: rgba(190, 188, 182, 0.15);
+        --error-bg: rgba(255, 108, 108, 0.2); --error-text: #ffdede;
+        --tok-keyword: #6cb6ff; --tok-string: #6fd18f; --tok-number: #5fd3d3;
+        --tok-comment: #9a968f; --tok-operator: #ff9a5c;
       }
     }
+
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--text);
-           font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
-    .page { max-width: 900px; margin: 0 auto; padding: 24px 16px 140px; }
-    h1 { margin: 0 0 4px; font-size: 1.8rem; }
-    .subtitle { margin: 0 0 20px; color: var(--muted); }
+           font: 16px/1.6 "Source Sans 3", "Source Sans Pro", sans-serif; }
+    button, textarea { font: inherit; color: inherit; }
 
-    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 20px; }
-    .toolbar label { padding: 6px 14px; border: 1px solid var(--border); border-radius: 999px;
-                     cursor: pointer; background: var(--panel); }
-    .toolbar input { display: none; }
-    .toolbar input:checked + span { color: var(--accent); font-weight: 600; }
-    .toolbar label:has(input:checked) { border-color: var(--accent); }
-    #clear { margin-left: auto; }
+    /* ---------- Sidebar ---------- */
+    .sidebar { position: fixed; top: 0; bottom: 0; left: 0; width: 300px; overflow-y: auto;
+               background: var(--sidebar); border-right: 1px solid var(--line);
+               padding: 76px 20px 20px; z-index: 20; }
+    .sidebar h2 { font-size: 20px; font-weight: 600; line-height: 1.2; margin: 0; padding: 16px 0; }
+    .label { font-size: 14px; margin-bottom: 4px; }
+    .radio { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 22.4px;
+             cursor: pointer; margin-bottom: 0; }
+    .radio input { appearance: none; margin: 0; width: 16px; height: 16px; border-radius: 50%;
+                   border: 1px solid var(--button-border); background: var(--sidebar); cursor: pointer; }
+    .radio input:checked { border: 5px solid var(--primary); background: #fff; }
+    .button { padding: 4px 12px; min-height: 40px; border-radius: 8px; cursor: pointer;
+              border: 1px solid var(--button-border); background: var(--button-bg); }
+    .button:hover { border-color: var(--primary); color: var(--primary); }
+    #clear { margin-top: 16px; font-size: 14px; }
 
-    button { font: inherit; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border);
-             background: var(--panel); color: var(--text); cursor: pointer; }
+    /* Small screens: the sidebar slides in from the left (like in Streamlit). */
+    .sidebar-toggle { display: none; position: fixed; top: 14px; left: 14px; z-index: 30;
+                      width: 32px; height: 32px; border: none; border-radius: 8px;
+                      background: transparent; cursor: pointer; font-size: 20px; line-height: 1; }
+    @media (max-width: 767px) {
+      .sidebar { transform: translateX(-100%); transition: transform .2s; box-shadow: none; }
+      body.sidebar-open .sidebar { transform: none; box-shadow: 0 0 24px rgba(0,0,0,.2); }
+      .sidebar-toggle { display: block; }
+    }
 
-    .message { margin: 14px 0; padding: 12px 16px; border-radius: 12px; background: var(--panel);
-               border: 1px solid var(--border); overflow-wrap: anywhere; }
-    .message.user { background: var(--user); white-space: pre-wrap; }
-    .message.error { border-color: #dc2626; color: #dc2626; }
-    .role { font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
-    .message pre { background: var(--code); padding: 12px; border-radius: 8px; overflow-x: auto; }
-    .message code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; }
+    /* ---------- Main area ---------- */
+    .main { margin-left: 300px; padding: 96px 80px 150px; }
+    @media (max-width: 767px) { .main { margin-left: 0; padding: 64px 16px 140px; } }
+    h1 { font-size: 44px; font-weight: 700; line-height: 1.2; margin: 0; padding: 20px 0 16px; }
+    @media (max-width: 767px) { h1 { font-size: 32px; } }
+    .subtitle { margin: 0 0 16px; }
+
+    /* Chat messages */
+    .message { display: flex; gap: 8px; padding: 16px; border-radius: 8px; margin-bottom: 16px; }
+    .message.user { background: var(--user-msg); }
+    .avatar { flex: none; width: 32px; height: 32px; border-radius: 8px; color: #fff;
+              display: flex; align-items: center; justify-content: center; }
+    .avatar svg { width: 20px; height: 20px; fill: currentColor; }
+    .user .avatar { background: #d94a57; }
+    .assistant .avatar { background: #e0682b; }
+    .content { flex: 1; min-width: 0; padding-top: 3px; overflow-wrap: anywhere; }
+    .user .content { white-space: pre-wrap; }
+
+    /* Markdown inside answers (same sizes as Streamlit) */
+    .content > :first-child { margin-top: 0; padding-top: 0; }
+    .content p { margin: 0 0 16px; }
+    .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 {
+      font-weight: 600; line-height: 1.2; margin: 0; padding: 16px 0; }
+    .content h1 { font-size: 44px; font-weight: 700; } .content h2 { font-size: 36px; }
+    .content h3 { font-size: 28px; } .content h4 { font-size: 24px; }
+    .content h5 { font-size: 20px; } .content h6 { font-size: 16px; }
+    .content strong { font-weight: 600; }
+    .content ul, .content ol { margin: 0 0 16px; padding-left: 0; }
+    .content li { margin: 3.2px 0 3.2px 18.4px; padding-left: 4.8px; }
+    .content hr { border: none; border-bottom: 1px solid var(--line); margin: 32px 0; }
+    .content a { color: var(--primary); }
+    .content blockquote { margin: 0 0 16px; padding-left: 16px; border-left: 4px solid var(--line); }
+    .content table { border-collapse: collapse; margin: 0 0 16px; display: block; overflow-x: auto; }
+    .content th, .content td { border: 1px solid var(--line); padding: 6px 12px; text-align: left; }
+    code { font-family: "Source Code Pro", monospace; font-size: 12px; }
+    .content :not(pre) > code { background: var(--code-bg); padding: 2.4px 4.8px; border-radius: 4px; }
+    pre { background: var(--code-bg); padding: 16px; border-radius: 8px; margin: 0 0 16px;
+          overflow-x: auto; line-height: 19.2px; }
+    pre code { font-size: 14px; line-height: 1.6; }
+    .katex { font-size: 1.21em; }
     .katex-display { overflow-x: auto; overflow-y: hidden; }
-    details { margin-top: 10px; }
-    summary { cursor: pointer; color: var(--muted); }
-    .source-name { font-size: .85rem; color: var(--muted); margin-top: 10px; }
 
-    form { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg);
-           border-top: 1px solid var(--border); padding: 12px 16px; }
-    .form-inner { max-width: 900px; margin: 0 auto; display: flex; gap: 8px; }
-    textarea { flex: 1; font: inherit; padding: 10px 12px; border-radius: 10px; resize: none;
-               border: 1px solid var(--border); background: var(--panel); color: var(--text); }
-    #send { background: var(--accent); color: #fff; border: none; padding: 0 20px; }
-    #send:disabled { opacity: .5; cursor: wait; }
+    /* Code colors */
+    .token.keyword, .token.builtin, .token.boolean, .token.constant { color: var(--tok-keyword); }
+    .token.string, .token.char, .token.triple-quoted-string { color: var(--tok-string); }
+    .token.number { color: var(--tok-number); }
+    .token.comment { color: var(--tok-comment); font-style: italic; }
+    .token.operator { color: var(--tok-operator); }
+
+    /* "View Context Sources" box */
+    details { border: 1px solid var(--border); border-radius: 8px; }
+    summary { list-style: none; cursor: pointer; padding: 4px 12px; min-height: 38px;
+              display: flex; align-items: center; gap: 12px; font-size: 14px; }
+    summary::-webkit-details-marker { display: none; }
+    summary::before { content: "›"; font-size: 22px; line-height: 1; transition: transform .15s; }
+    details[open] summary::before { transform: rotate(90deg); }
+    summary:hover { color: var(--primary); }
+    .sources { padding: 0 16px 16px; }
+    .caption { font-size: 14px; color: var(--muted); margin: 0 0 16px; }
+
+    /* "Thinking..." spinner and error box */
+    .spinner { display: flex; align-items: center; gap: 8px; }
+    .spinner::before { content: ""; width: 16px; height: 16px; border-radius: 50%;
+                       border: 2px solid var(--line); border-top-color: var(--text);
+                       animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error { background: var(--error-bg); color: var(--error-text); padding: 16px; border-radius: 8px; }
+
+    /* Chat input at the bottom */
+    .bottom { position: fixed; left: 300px; right: 0; bottom: 0; background: var(--bg);
+              padding: 16px 80px 56px; z-index: 10; }
+    @media (max-width: 767px) { .bottom { left: 0; padding: 12px 16px 24px; } }
+    .chat-input { display: flex; align-items: center; gap: 8px; background: var(--input-bg);
+                  border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+    .chat-input:focus-within { border-color: var(--primary); }
+    .chat-input textarea { flex: 1; border: none; outline: none; resize: none; background: transparent;
+                           font-size: 14px; line-height: 19.6px; padding: 4px 0 4px 8px; max-height: 200px; }
+    .chat-input textarea::placeholder { color: var(--muted); }
+    #send { flex: none; width: 32px; height: 32px; padding: 6px; border: none; border-radius: 8px;
+            background: var(--send-bg); color: var(--muted); cursor: pointer; }
+    #send svg { width: 20px; height: 20px; fill: currentColor; }
+    #send:not(:disabled):hover { background: var(--primary); color: #fff; }
+    #send:disabled { cursor: not-allowed; }
   </style>
 </head>
 <body>
-  <div class="page">
+  <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Open sidebar">»</button>
+
+  <aside class="sidebar">
+    <h2>Settings</h2>
+    <div class="label">Choose Task:</div>
+    <label class="radio"><input type="radio" name="task" value="Debug Code" checked>Debug Code</label>
+    <label class="radio"><input type="radio" name="task" value="Translate Code">Translate Code</label>
+    <label class="radio"><input type="radio" name="task" value="Explain Algorithm">Explain Algorithm</label>
+    <button class="button" id="clear" type="button">Clear History</button>
+  </aside>
+
+  <main class="main">
     <h1>🤖 AI Code Coach</h1>
     <p class="subtitle">RAG-powered assistant for debugging, translating, and explaining your code.</p>
-
-    <div class="toolbar">
-      <label><input type="radio" name="task" value="Debug Code" checked><span>Debug Code</span></label>
-      <label><input type="radio" name="task" value="Translate Code"><span>Translate Code</span></label>
-      <label><input type="radio" name="task" value="Explain Algorithm"><span>Explain Algorithm</span></label>
-      <button id="clear" type="button">Clear History</button>
-    </div>
-
     <div id="chat"></div>
-  </div>
+  </main>
 
-  <form id="form">
-    <div class="form-inner">
-      <textarea id="question" rows="2" placeholder="Ask about your code... (Enter to send, Shift+Enter for a new line)" required></textarea>
-      <button id="send" type="submit">Send</button>
+  <form class="bottom" id="form">
+    <div class="chat-input">
+      <textarea id="question" rows="1" placeholder="Ask about your code..."></textarea>
+      <button id="send" type="submit" aria-label="Send" disabled>
+        <svg viewBox="0 0 24 24"><path d="M13 19V7.83l4.88 4.88c.39.39 1.03.39 1.42 0a.996.996 0 000-1.41l-6.59-6.59a.996.996 0 00-1.41 0l-6.6 6.58a.996.996 0 101.41 1.41L11 7.83V19c0 .55.45 1 1 1s1-.45 1-1z"/></svg>
+      </button>
     </div>
   </form>
 
@@ -91,19 +193,24 @@
     // Address of the backend API on Render.
     const API_URL = "https://ai-code-coach-kghe.onrender.com";
 
+    // Avatar icons (the same ones Streamlit uses)
+    const USER_ICON = '<svg viewBox="0 0 24 24"><path d="M9 11.75a1.25 1.25 0 100 2.5 1.25 1.25 0 000-2.5zm6 0a1.25 1.25 0 100 2.5 1.25 1.25 0 000-2.5zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-.29.02-.58.05-.86 2.36-1.05 4.23-2.98 5.21-5.37a9.97 9.97 0 008.16 4.23c.78 0 1.53-.09 2.25-.26.21.71.33 1.47.33 2.26 0 4.41-3.59 8-8 8z"/></svg>';
+    const BOT_ICON = '<svg viewBox="0 0 24 24"><path d="M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15 13z"/></svg>';
+
     const chat = document.getElementById("chat");
     const form = document.getElementById("form");
     const input = document.getElementById("question");
     const sendButton = document.getElementById("send");
+    let waiting = false;  // true while we wait for an answer
 
-    // Add one message box to the chat and return it.
-    function addMessage(role, cssClass) {
+    // Add one chat message (avatar + content) and return its content box.
+    function addMessage(role) {
       const box = document.createElement("div");
-      box.className = "message " + cssClass;
-      box.innerHTML = `<div class="role">${role}</div><div class="body"></div>`;
+      box.className = "message " + role;
+      box.innerHTML = `<div class="avatar">${role === "user" ? USER_ICON : BOT_ICON}</div><div class="content"></div>`;
       chat.appendChild(box);
-      box.scrollIntoView({ behavior: "smooth" });
-      return box.querySelector(".body");
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      return box.querySelector(".content");
     }
 
     // Turn the AI's answer (Markdown with math like \[ x \] or \( x \)) into HTML.
@@ -130,27 +237,30 @@
       });
     }
 
-    function showSources(body, sources) {
+    // The "View Context Sources" box under each answer.
+    function showSources(content, sources) {
       const details = document.createElement("details");
-      details.innerHTML = "<summary>View Context Sources</summary>";
+      details.innerHTML = '<summary>View Context Sources</summary><div class="sources"></div>';
+      const list = details.querySelector(".sources");
       for (const { source, code } of sources) {
-        const name = document.createElement("div");
-        name.className = "source-name";
-        name.textContent = "Source: " + source;
+        const caption = document.createElement("p");
+        caption.className = "caption";
+        caption.textContent = "Source: " + source;
         const pre = document.createElement("pre");
-        pre.innerHTML = "<code></code>";
+        pre.innerHTML = '<code class="language-python"></code>';
         pre.firstChild.textContent = code;
-        details.append(name, pre);
+        list.append(caption, pre);
       }
-      body.appendChild(details);
+      content.appendChild(details);
     }
 
     async function ask(question) {
       const task = document.querySelector("input[name=task]:checked").value;
-      addMessage("You", "user").textContent = question;
-      const answerBox = addMessage("AI Code Coach", "assistant");
-      answerBox.textContent = "Thinking... (the first question can take up to a minute while the free server wakes up)";
-      sendButton.disabled = true;
+      addMessage("user").textContent = question;
+      const content = addMessage("assistant");
+      content.innerHTML = '<div class="spinner">Thinking...</div>';
+      waiting = true;
+      updateSendButton();
 
       try {
         const response = await fetch(API_URL + "/ask", {
@@ -160,22 +270,36 @@
         });
         if (!response.ok) throw new Error(`server answered ${response.status} ${await response.text()}`);
         const data = await response.json();
-        answerBox.innerHTML = renderAnswer(data.answer);
-        showSources(answerBox, data.sources);
+        content.innerHTML = renderAnswer(data.answer);
+        showSources(content, data.sources);
+        Prism.highlightAllUnder(content);  // color the code
       } catch (error) {
-        answerBox.parentElement.classList.add("error");
-        answerBox.textContent = "Something went wrong: " + error.message;
+        content.innerHTML = '<div class="error"></div>';
+        content.firstChild.textContent = "Something went wrong: " + error.message;
       } finally {
-        sendButton.disabled = false;
+        waiting = false;
+        updateSendButton();
       }
+    }
+
+    // The send arrow is only clickable when there is text and we are not waiting.
+    function updateSendButton() {
+      sendButton.disabled = waiting || !input.value.trim();
     }
 
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const question = input.value.trim();
-      if (!question || sendButton.disabled) return;
+      if (!question || waiting) return;
       input.value = "";
+      input.style.height = "";
       ask(question);
+    });
+
+    input.addEventListener("input", () => {
+      updateSendButton();
+      input.style.height = "";                       // grow the box as you type
+      input.style.height = input.scrollHeight + "px";
     });
 
     // Enter sends, Shift+Enter makes a new line.
@@ -187,6 +311,11 @@
     });
 
     document.getElementById("clear").addEventListener("click", () => { chat.innerHTML = ""; });
+
+    // Small screens: open/close the sidebar.
+    document.getElementById("sidebar-toggle").addEventListener("click", () => {
+      document.body.classList.toggle("sidebar-open");
+    });
   </script>
 </body>
 </html>
